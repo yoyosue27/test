@@ -107,36 +107,53 @@ export default {
       },
       isLoading: false,
       errorMessage: '',
-      successMessage: '',
-      validCredentials: {
-        username: 'demo@instagram.com',
-        password: 'password123'
-      }
+      successMessage: ''
     }
   },
   methods: {
-    handleLogin() {
+    async handleLogin() {
       this.clearMessages()
       this.isLoading = true
 
-      // Simulate API call
-      setTimeout(() => {
-        if (
-          this.formData.username === this.validCredentials.username &&
-          this.formData.password === this.validCredentials.password
-        ) {
-          this.successMessage = '✓ Login successful! Welcome back.'
-          this.formData.username = ''
-          this.formData.password = ''
-          
-          setTimeout(() => {
-            alert('Redirecting to homepage...')
-          }, 1500)
-        } else {
-          this.errorMessage = 'Sorry, your password was incorrect. Please double-check it.'
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'login',
+            email: this.formData.username,
+            password: this.formData.password
+          })
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          this.errorMessage = data.error || 'Login failed'
+          this.isLoading = false
+          return
         }
-        this.isLoading = false
-      }, 1000)
+
+        this.successMessage = '✓ Login successful! Welcome back.'
+        
+        // Store token
+        if (data.token) {
+          localStorage.setItem('authToken', data.token)
+          localStorage.setItem('user', JSON.stringify(data.user))
+        }
+
+        this.formData.username = ''
+        this.formData.password = ''
+
+        setTimeout(() => {
+          alert('Redirecting to homepage...')
+        }, 1500)
+      } catch (error) {
+        this.errorMessage = 'Network error. Please try again.'
+        console.error(error)
+      }
+
+      this.isLoading = false
     },
     loginWithFacebook() {
       this.successMessage = '✓ Facebook login initiated...'
