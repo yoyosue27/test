@@ -11,10 +11,16 @@
 
     <!-- Form side -->
     <div class="login-form-wrapper">
-      <form class="login-form" @submit.prevent="handleLogin">
+      <form class="login-form" @submit.prevent="isSignupMode ? handleSignup : handleLogin">
         <!-- Logo -->
         <div class="logo">
           <div class="instagram-logo">Instagram</div>
+        </div>
+
+        <!-- Mode Toggle -->
+        <div class="mode-toggle">
+          <span :class="{ active: !isSignupMode }" @click="isSignupMode = false">Log in</span>
+          <span :class="{ active: isSignupMode }" @click="isSignupMode = true">Sign up</span>
         </div>
 
         <!-- Error Message -->
@@ -41,8 +47,32 @@
           <span>OR</span>
         </div>
 
-        <!-- Email Input -->
-        <div class="form-group">
+        <!-- Email Input (for signup) -->
+        <div class="form-group" v-if="isSignupMode">
+          <label>Email</label>
+          <input
+            type="email"
+            v-model="formData.email"
+            placeholder="Enter your email"
+            required
+            @focus="clearMessages"
+          />
+        </div>
+
+        <!-- Username Input (for signup) -->
+        <div class="form-group" v-if="isSignupMode">
+          <label>Username</label>
+          <input
+            type="text"
+            v-model="formData.signupUsername"
+            placeholder="Choose a username"
+            required
+            @focus="clearMessages"
+          />
+        </div>
+
+        <!-- Email Input (for login) -->
+        <div class="form-group" v-if="!isSignupMode">
           <label>Username or Email</label>
           <input
             type="text"
@@ -77,7 +107,7 @@
 
         <!-- Login Button -->
         <button type="submit" class="login-btn" :disabled="isLoading">
-          {{ isLoading ? 'Logging in...' : 'Log in' }}
+          {{ isLoading ? (isSignupMode ? 'Creating account...' : 'Logging in...') : (isSignupMode ? 'Sign up' : 'Log in') }}
         </button>
 
         <!-- Forgot Password -->
@@ -86,9 +116,15 @@
         </div>
 
         <!-- Signup Prompt -->
-        <div class="signup-prompt">
+        <div class="signup-prompt" v-if="!isSignupMode">
           Don't have an account? 
-          <a href="#" @click.prevent="handleSignup">Sign up</a>
+          <a href="#" @click.prevent="isSignupMode = true">Sign up</a>
+        </div>
+
+        <!-- Login Prompt -->
+        <div class="signup-prompt" v-if="isSignupMode">
+          Already have an account? 
+          <a href="#" @click.prevent="isSignupMode = false">Log in</a>
         </div>
       </form>
     </div>
@@ -100,8 +136,11 @@ export default {
   name: 'LoginForm',
   data() {
     return {
+      isSignupMode: false,
       formData: {
         username: '',
+        email: '',
+        signupUsername: '',
         password: '',
         rememberMe: false
       },
@@ -167,11 +206,53 @@ export default {
       this.successMessage = 'Password reset link has been sent to your email.'
       setTimeout(() => this.clearMessages(), 3000)
     },
-    handleSignup() {
-      this.successMessage = 'Redirecting to signup page...'
-      setTimeout(() => this.clearMessages(), 2000)
-    },
-    clearMessages() {
+    async handleSignup() {
+      this.clearMessages()
+      this.isLoading = true
+
+      try {
+        const response = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'register',
+            email: this.formData.email,
+            username: this.formData.signupUsername,
+            password: this.formData.password
+          })
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          this.errorMessage = data.error || 'Registration failed'
+          this.isLoading = false
+          return
+        }
+
+        this.successMessage = '✓ Account created successfully! Welcome to Instagram.'
+        
+        // Store token
+        if (data.token) {
+          localStorage.setItem('authToken', data.token)
+          localStorage.setItem('user', JSON.stringify(data.user))
+        }
+
+        // Clear form
+        this.formData.email = ''
+        this.formData.signupUsername = ''
+        this.formData.password = ''
+
+        setTimeout(() => {
+          alert('Redirecting to your profile...')
+          this.isSignupMode = false
+        }, 1500)
+      } catch (error) {
+        this.errorMessage = 'Network error. Please try again.'
+        console.error(error)
+      }
+
+      this.isLoading = false
       this.errorMessage = ''
       this.successMessage = ''
     }
@@ -258,6 +339,34 @@ export default {
   letter-spacing: 1px;
   font-family: 'Brush Script MT', cursive;
   color: #000;
+}
+
+.mode-toggle {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e5e5e5;
+  padding-bottom: 10px;
+}
+
+.mode-toggle span {
+  font-size: 14px;
+  font-weight: 600;
+  color: #999;
+  cursor: pointer;
+  padding-bottom: 10px;
+  margin-bottom: -10px;
+  transition: all 0.2s;
+}
+
+.mode-toggle span.active {
+  color: #000;
+  border-bottom: 2px solid #000;
+}
+
+.mode-toggle span:hover:not(.active) {
+  color: #ccc;
 }
 
 .form-group {
