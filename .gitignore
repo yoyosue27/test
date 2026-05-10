@@ -8,3 +8,4 @@ dist/
 .env
 .env.local
 data/users.json
+data/posts.json

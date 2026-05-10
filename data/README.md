@@ -19,7 +19,7 @@ Auto-generated when the first user registers.
 ]
 ```
 
-**Note:** Passwords are hashed using bcryptjs and cannot be decrypted.
+**Note:** Passwords are hashed using Node's built-in PBKDF2 password hashing and cannot be decrypted.
 
 ## For Production
 
@@ -35,6 +35,10 @@ Each provides better scalability, security, and backup features.
 
 In development, this JSON file stores users locally for testing.
 It's safe to delete and regenerate by registering new users.
+
+## posts.json
+
+Auto-generated when signed-in users create posts or comments. It stores post text, optional image data, comment text, author metadata, and timestamps for the local demo feed.
 
 ## .gitignore
 

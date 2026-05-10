@@ -1,103 +1,195 @@
-import bcrypt from 'bcryptjs'
-import jwt from 'jsonwebtoken'
 import fs from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 
 const USERS_FILE = path.join(process.cwd(), 'data', 'users.json')
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
+const HASH_ITERATIONS = 120000
+const HASH_LENGTH = 64
+const HASH_DIGEST = 'sha512'
 
-// Ensure data directory exists
 function ensureDataDir() {
   const dataDir = path.dirname(USERS_FILE)
+
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true })
   }
 }
 
-// Get all users
 function getUsers() {
   ensureDataDir()
+
   try {
     if (!fs.existsSync(USERS_FILE)) {
       return []
     }
+
     return JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'))
   } catch {
     return []
   }
 }
 
-// Save users
 function saveUsers(users) {
   ensureDataDir()
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2))
 }
 
-// Find user by email
-function findUserByEmail(email) {
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase()
+}
+
+function normalizeUsername(username) {
+  return String(username || '').trim()
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
+function isValidUsername(username) {
+  return /^[a-zA-Z0-9._-]{3,30}$/.test(username)
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    username: user.username,
+    createdAt: user.createdAt
+  }
+}
+
+function findUserByLogin(login) {
+  const normalizedLogin = normalizeEmail(login)
   const users = getUsers()
-  return users.find(u => u.email === email)
+
+  return users.find(user => {
+    return user.email === normalizedLogin || user.username.toLowerCase() === normalizedLogin
+  })
 }
 
-// Hash password
-async function hashPassword(password) {
-  return bcrypt.hash(password, 10)
+export function findUserById(id) {
+  const users = getUsers()
+  const user = users.find(item => item.id === id)
+
+  return user ? publicUser(user) : null
 }
 
-// Verify password
-async function verifyPassword(password, hash) {
-  return bcrypt.compare(password, hash)
+function userExists(email, username) {
+  const normalizedEmail = normalizeEmail(email)
+  const normalizedUsername = normalizeUsername(username).toLowerCase()
+  const users = getUsers()
+
+  return users.some(user => {
+    return user.email === normalizedEmail || user.username.toLowerCase() === normalizedUsername
+  })
 }
 
-// Create JWT token
-function createToken(user) {
-  return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '24h' })
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString('base64url')
+  const hash = crypto
+    .pbkdf2Sync(password, salt, HASH_ITERATIONS, HASH_LENGTH, HASH_DIGEST)
+    .toString('base64url')
+
+  return `pbkdf2:${HASH_DIGEST}:${HASH_ITERATIONS}:${salt}:${hash}`
 }
 
-// Register user
-export async function registerUser(email, password, username) {
-  const existingUser = findUserByEmail(email)
-  if (existingUser) {
-    return { error: 'User already exists', status: 400 }
+function verifyPassword(password, storedHash) {
+  const [scheme, digest, iterations, salt, hash] = String(storedHash || '').split(':')
+
+  if (scheme !== 'pbkdf2' || !digest || !iterations || !salt || !hash) {
+    return false
   }
 
-  const hashedPassword = await hashPassword(password)
+  const candidate = crypto
+    .pbkdf2Sync(password, salt, Number(iterations), HASH_LENGTH, digest)
+    .toString('base64url')
+
+  return crypto.timingSafeEqual(Buffer.from(candidate), Buffer.from(hash))
+}
+
+function base64UrlJson(payload) {
+  return Buffer.from(JSON.stringify(payload)).toString('base64url')
+}
+
+function sign(value) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(value).digest('base64url')
+}
+
+function createToken(user) {
+  const header = base64UrlJson({ alg: 'HS256', typ: 'JWT' })
+  const payload = base64UrlJson({
+    id: user.id,
+    email: user.email,
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24
+  })
+  const unsignedToken = `${header}.${payload}`
+
+  return `${unsignedToken}.${sign(unsignedToken)}`
+}
+
+export async function registerUser(email, password, username) {
+  const normalizedEmail = normalizeEmail(email)
+  const normalizedUsername = normalizeUsername(username)
+
+  if (!isValidEmail(normalizedEmail)) {
+    return { error: 'Enter a valid email address.', status: 400 }
+  }
+
+  if (!isValidUsername(normalizedUsername)) {
+    return { error: 'Username must be 3-30 characters and use only letters, numbers, dots, underscores, or hyphens.', status: 400 }
+  }
+
+  if (String(password || '').length < 8) {
+    return { error: 'Password must be at least 8 characters.', status: 400 }
+  }
+
+  if (userExists(normalizedEmail, normalizedUsername)) {
+    return { error: 'Email or username already exists.', status: 400 }
+  }
+
   const users = getUsers()
   const newUser = {
-    id: Date.now().toString(),
-    email,
-    username,
-    password: hashedPassword,
+    id: crypto.randomUUID(),
+    email: normalizedEmail,
+    username: normalizedUsername,
+    password: hashPassword(password),
     createdAt: new Date().toISOString()
   }
 
   users.push(newUser)
   saveUsers(users)
 
-  const token = createToken(newUser)
-  return { token, user: { id: newUser.id, email, username }, status: 201 }
+  return { token: createToken(newUser), user: publicUser(newUser), status: 201 }
 }
 
-// Login user
-export async function loginUser(email, password) {
-  const user = findUserByEmail(email)
-  if (!user) {
-    return { error: 'User not found', status: 401 }
+export async function loginUser(login, password) {
+  const user = findUserByLogin(login)
+
+  if (!user || !verifyPassword(password, user.password)) {
+    return { error: 'Invalid email/username or password.', status: 401 }
   }
 
-  const isPasswordValid = await verifyPassword(password, user.password)
-  if (!isPasswordValid) {
-    return { error: 'Invalid password', status: 401 }
-  }
-
-  const token = createToken(user)
-  return { token, user: { id: user.id, email: user.email, username: user.username }, status: 200 }
+  return { token: createToken(user), user: publicUser(user), status: 200 }
 }
 
-// Verify token
 export function verifyToken(token) {
   try {
-    return jwt.verify(token, JWT_SECRET)
+    const [header, payload, signature] = String(token || '').split('.')
+    const unsignedToken = `${header}.${payload}`
+
+    if (!header || !payload || !signature || sign(unsignedToken) !== signature) {
+      return null
+    }
+
+    const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString('utf-8'))
+
+    if (decoded.exp < Math.floor(Date.now() / 1000)) {
+      return null
+    }
+
+    return decoded
   } catch {
     return null
   }

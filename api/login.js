@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   res.setHeader('Content-Type', 'application/json')
 
   if (req.method === 'POST') {
-    const { action, email, password, username } = req.body
+    const { action, email, password, username } = req.body || {}
 
     if (!action) {
       return res.status(400).json({ error: 'Action required (register or login)' })
@@ -24,7 +24,7 @@ export default async function handler(req, res) {
 
       if (action === 'login') {
         if (!email || !password) {
-          return res.status(400).json({ error: 'Email and password required' })
+          return res.status(400).json({ error: 'Email/username and password required' })
         }
         const result = await loginUser(email, password)
         if (result.error) {
