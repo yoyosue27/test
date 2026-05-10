@@ -1,6 +1,6 @@
 import fs from 'fs'
 import crypto from 'crypto'
-import { findUserById, verifyToken } from './auth.js'
+import { verifyToken } from './auth.js'
 import { ensureDataFileDir, getDataFilePath } from './storage.js'
 
 const POSTS_FILE = getDataFilePath('posts.json')
@@ -38,11 +38,16 @@ function getBearerToken(req) {
 function getCurrentUser(req) {
   const decoded = verifyToken(getBearerToken(req))
 
-  if (!decoded) {
+  if (!decoded?.id || !decoded?.email || !decoded?.username) {
     return null
   }
 
-  return findUserById(decoded.id)
+  return {
+    id: decoded.id,
+    email: decoded.email,
+    username: decoded.username,
+    createdAt: decoded.createdAt
+  }
 }
 
 function validateImageData(imageData) {
