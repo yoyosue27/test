@@ -1,16 +1,12 @@
 import fs from 'fs'
-import path from 'path'
 import crypto from 'crypto'
 import { findUserById, verifyToken } from './auth.js'
+import { ensureDataFileDir, getDataFilePath } from './storage.js'
 
-const POSTS_FILE = path.join(process.cwd(), 'data', 'posts.json')
+const POSTS_FILE = getDataFilePath('posts.json')
 
 function ensureDataDir() {
-  const dataDir = path.dirname(POSTS_FILE)
-
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true })
-  }
+  ensureDataFileDir(POSTS_FILE)
 }
 
 function getPosts() {

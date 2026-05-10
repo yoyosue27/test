@@ -1,19 +1,15 @@
 import fs from 'fs'
-import path from 'path'
 import crypto from 'crypto'
+import { ensureDataFileDir, getDataFilePath } from './storage.js'
 
-const USERS_FILE = path.join(process.cwd(), 'data', 'users.json')
+const USERS_FILE = getDataFilePath('users.json')
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
 const HASH_ITERATIONS = 120000
 const HASH_LENGTH = 64
 const HASH_DIGEST = 'sha512'
 
 function ensureDataDir() {
-  const dataDir = path.dirname(USERS_FILE)
-
-  if (!fs.existsSync(dataDir)) {
-    fs.mkdirSync(dataDir, { recursive: true })
-  }
+  ensureDataFileDir(USERS_FILE)
 }
 
 function getUsers() {

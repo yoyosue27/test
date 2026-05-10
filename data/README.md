@@ -36,6 +36,8 @@ Each provides better scalability, security, and backup features.
 In development, this JSON file stores users locally for testing.
 It's safe to delete and regenerate by registering new users.
 
+On Vercel, serverless functions cannot write to this repository folder. The app writes demo data to Vercel's temporary `/tmp` storage instead, which avoids deployment errors but is not a permanent production database.
+
 ## posts.json
 
 Auto-generated when signed-in users create posts or comments. It stores post text, optional image data, comment text, author metadata, and timestamps for the local demo feed.
