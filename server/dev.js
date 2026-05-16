@@ -6,7 +6,8 @@ const HOST = process.env.HOST || '127.0.0.1'
 
 const routes = {
   '/api/login': () => import('../api/login.js'),
-  '/api/posts': () => import('../api/posts.js')
+  '/api/posts': () => import('../api/posts.js'),
+  '/api/google-auth': () => import('../api/google-auth.js')
 }
 
 function readBody(req) {

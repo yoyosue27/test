@@ -396,9 +396,81 @@ export default {
       this.successMessage = 'Facebook login is not connected yet.'
       setTimeout(() => this.clearMessages(), 2000)
     },
-    loginWithGoogle() {
-      this.successMessage = 'Google login is not connected yet.'
-      setTimeout(() => this.clearMessages(), 2000)
+    async loginWithGoogle() {
+      this.clearMessages()
+      this.isLoading = true
+
+      try {
+        // Check if Google Sign-In library is loaded
+        if (!window.google) {
+          throw new Error('Google Sign-In library not loaded. Please refresh the page.')
+        }
+
+        // Get the Client ID
+        const clientId = this.getGoogleClientId()
+
+        // Initialize Google Accounts
+        google.accounts.id.initialize({
+          client_id: clientId,
+          callback: (response) => {
+            if (response.credential) {
+              this.completeGoogleLogin(response.credential)
+            } else {
+              this.errorMessage = 'No credential received from Google'
+              this.isLoading = false
+            }
+          }
+        })
+
+        // Show the sign-in dialog
+        google.accounts.id.renderButton(
+          document.createElement('div'),
+          { theme: 'outline', size: 'large', locale: 'en' }
+        )
+
+        // Use One Tap UI
+        await new Promise((resolve) => {
+          const promptPromise = google.accounts.id.prompt((notification) => {
+            if (notification.isDisplayed()) {
+              resolve()
+            } else if (notification.isDismissedMoment()) {
+              // User dismissed the prompt, trigger manual sign-in
+              google.accounts.id.renderButton(
+                document.getElementById('google-signin-button') || document.createElement('div'),
+                { theme: 'outline', size: 'large' }
+              )
+              resolve()
+            }
+          })
+        })
+      } catch (error) {
+        this.errorMessage = error.message || 'Google login initialization failed'
+        this.isLoading = false
+      }
+    },
+    async completeGoogleLogin(idToken) {
+      try {
+        const data = await this.requestJson('/api/google-auth', {
+          method: 'POST',
+          body: JSON.stringify({ idToken })
+        })
+
+        this.successMessage = 'Google login successful. Welcome!'
+        this.storeSession(data)
+      } catch (error) {
+        this.errorMessage = error.message || 'Google login failed'
+      } finally {
+        this.isLoading = false
+      }
+    },
+    getGoogleClientId() {
+      const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
+      if (!clientId || clientId === 'YOUR_GOOGLE_CLIENT_ID_HERE') {
+        throw new Error(
+          'Google Client ID not configured. Follow the setup guide in GOOGLE_OAUTH_SETUP.md'
+        )
+      }
+      return clientId
     },
     handleForgotPassword() {
       this.successMessage = 'Password reset is not connected yet.'

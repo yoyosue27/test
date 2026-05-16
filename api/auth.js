@@ -192,3 +192,55 @@ export function verifyToken(token) {
     return null
   }
 }
+
+export async function loginOrRegisterWithGoogle(googleProfile) {
+  const { email, name, picture } = googleProfile
+  const normalizedEmail = normalizeEmail(email)
+
+  if (!normalizedEmail) {
+    return { error: 'Google profile does not contain an email.', status: 400 }
+  }
+
+  let users = getUsers()
+  let user = users.find(u => u.email === normalizedEmail)
+
+  // If user exists, update their profile and return
+  if (user) {
+    user.name = name
+    user.picture = picture
+    user.lastLogin = new Date().toISOString()
+    saveUsers(users)
+    return { token: createToken(user), user: publicUser(user), status: 200 }
+  }
+
+  // Create new user from Google profile
+  const baseUsername = name
+    .toLowerCase()
+    .replace(/\s+/g, '.')
+    .replace(/[^a-z0-9._-]/g, '')
+    .substring(0, 30)
+
+  // Ensure unique username
+  let username = baseUsername || 'user'
+  let counter = 1
+  while (userExists(normalizedEmail, username)) {
+    username = `${baseUsername}.${counter}`
+    counter++
+  }
+
+  const newUser = {
+    id: crypto.randomUUID(),
+    email: normalizedEmail,
+    username,
+    name,
+    picture,
+    provider: 'google',
+    createdAt: new Date().toISOString(),
+    lastLogin: new Date().toISOString()
+  }
+
+  users.push(newUser)
+  saveUsers(users)
+
+  return { token: createToken(newUser), user: publicUser(newUser), status: 201 }
+}
